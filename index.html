@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Kalkulator</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: radial-gradient(circle at 15% 15%, #2b1055 0%, #0f0f1a 60%, #08080f 100%);
+    color: #fff;
+  }
+
+  .calculator {
+    width: min(380px, 100%);
+    padding: 22px;
+    border-radius: 28px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.55),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  /* ---------- Display ---------- */
+  .display {
+    min-height: 132px;
+    padding: 18px;
+    margin-bottom: 18px;
+    border-radius: 18px;
+    background: rgba(0, 0, 0, 0.32);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: flex-end;
+    gap: 10px;
+    overflow: hidden;
+  }
+
+  .expression {
+    font-size: 0.95rem;
+    color: #8b8ba7;
+    min-height: 1.2em;
+    text-align: right;
+    word-break: break-all;
+    transition: color 0.2s;
+  }
+
+  .result {
+    font-size: clamp(1.8rem, 8vw, 2.5rem);
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -0.5px;
+    text-align: right;
+    word-break: break-all;
+    transition: font-size 0.15s, color 0.2s;
+  }
+
+  .result.small { font-size: 1.5rem; }
+
+  .result.error {
+    color: #ff6b81;
+    animation: shake 0.35s;
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25%      { transform: translateX(-7px); }
+    75%      { transform: translateX(7px); }
+  }
+
+  /* ---------- Keypad ---------- */
+  .keys {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 11px;
+  }
+
+  button {
+    padding: 17px 0;
+    border: none;
+    border-radius: 16px;
+    font-family: inherit;
+    font-size: 1.25rem;
+    font-weight: 500;
+    color: #e8e8f0;
+    background: rgba(255, 255, 255, 0.08);
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.18s, transform 0.09s, box-shadow 0.18s;
+  }
+
+  button:hover { background: rgba(255, 255, 255, 0.16); }
+  button:active,
+  button.pressed { transform: scale(0.93); }
+
+  .func { color: #ffa06b; }
+  .func:hover { background: rgba(255, 160, 107, 0.18); }
+
+  .op {
+    background: rgba(124, 77, 255, 0.32);
+    color: #c9b6ff;
+    font-size: 1.4rem;
+  }
+  .op:hover { background: rgba(124, 77, 255, 0.5); }
+
+  .equals {
+    background: linear-gradient(135deg, #7c4dff, #b06cff);
+    color: #fff;
+    font-size: 1.4rem;
+    box-shadow: 0 8px 22px rgba(124, 77, 255, 0.42);
+  }
+  .equals:hover {
+    background: linear-gradient(135deg, #8f66ff, #c084ff);
+  }
+</style>
+</head>
+<body>
+
+  <div class="calculator">
+    <div class="display">
+      <div class="expression" id="expression"></div>
+      <div class="result" id="result">0</div>
+    </div>
+
+    <div class="keys">
+      <button class="func" data-value="AC">AC</button>
+      <button class="func" data-value="DEL">⌫</button>
+      <button class="func" data-value="%">%</button>
+      <button class="op"   data-value="/">÷</button>
+
+      <button data-value="7">7</button>
+      <button data-value="8">8</button>
+      <button data-value="9">9</button>
+      <button class="op" data-value="*">×</button>
+
+      <button data-value="4">4</button>
+      <button data-value="5">5</button>
+      <button data-value="6">6</button>
+      <button class="op" data-value="-">−</button>
+
+      <button data-value="1">1</button>
+      <button data-value="2">2</button>
+      <button data-value="3">3</button>
+      <button class="op" data-value="+">+</button>
+
+      <button class="func" data-value="+/-">±</button>
+      <button data-value="0">0</button>
+      <button data-value=".">.</button>
+      <button class="equals" data-value="=">=</button>
+    </div>
+  </div>
+
+<script>
+/* =====================================================
+   1. PARSER EKSPRESI (aman, tanpa eval)
+   ===================================================== */
+function tokenize(str) {
+  const tokens = [];
+  let i = 0;
+
+  while (i < str.length) {
+    const c = str[i];
+
+    if (c === " ") { i++; continue; }
+
+    if (/[0-9.]/.test(c)) {
+      let num = "";
+      while (i < str.length && /[0-9.]/.test(str[i])) num += str[i++];
+      if (num === "." || (num.match(/\./g) || []).length > 1) {
+        throw new Error("Angka tidak valid");
+      }
+      tokens.push({ type: "num", value: parseFloat(num) });
+      continue;
+    }
+
+    if ("+-*/()%".includes(c)) {
+      tokens.push({ type: "op", value: c });
+      i++;
+      continue;
+    }
+
+    throw new Error("Karakter tidak valid: " + c);
+  }
+  return tokens;
+}
+
+function evaluate(str) {
+  const tokens = tokenize(str);
+  let pos = 0;
+
+  const peek = () => tokens[pos];
+  const next = () => tokens[pos++];
+
+  function parseExpression() {
+    let left = parseTerm();
+    while (peek() && (peek().value === "+" || peek().value === "-")) {
+      const op = next().value;
+      const right = parseTerm();
+      left = op === "+" ? left + right : left - right;
+    }
+    return left;
+  }
+
+  function parseTerm() {
+    let left = parseUnary();
+    while (peek() && (peek().value === "*" || peek().value === "/")) {
+      const op = next().value;
+      const right = parseUnary();
+      if (op === "*") {
+        left *= right;
+      } else {
+        if (right === 0) throw new Error("Tidak bisa dibagi nol");
+        left /= right;
+      }
+    }
+    return left;
+  }
+
+  function parseUnary() {
+    if (peek() && peek().value === "-") { next(); return -parseUnary(); }
+    if (peek() && peek().value === "+") { next(); return parseUnary(); }
+    return parsePostfix();
+  }
+
+  function parsePostfix() {
+    let val = parsePrimary();
+    while (peek() && peek().value === "%") { next(); val /= 100; }
+    return val;
+  }
+
+  function parsePrimary() {
+    const t = peek();
+    if (!t) throw new Error("Ekspresi tidak lengkap");
+
+    if (t.type === "num") { next(); return t.value; }
+
+    if (t.value === "(") {
+      next();
+      const val = parseExpression();
+      if (!peek() || peek().value !== ")") throw new Error("Kurung tidak tertutup");
+      next();
+      return val;
+    }
+
+    throw new Error("Ekspresi tidak valid");
+  }
+
+  const result = parseExpression();
+  if (pos < tokens.length) throw new Error("Ekspresi tidak valid");
+  if (!isFinite(result)) throw new Error("Hasil tidak terdefinisi");
+  return result;
+}
+
+/* =====================================================
+   2. STATE & TAMPILAN
+   ===================================================== */
+const expressionEl = document.getElementById("expression");
+const resultEl     = document.getElementById("result");
+
+let current        = "";      // ekspresi yang sedang diketik
+let lastExpr       = "";      // ekspresi terakhir yang dihitung
+let justEvaluated  = false;   // apakah barusan menekan "="
+let isError        = false;
+
+const OPS = "+-*/";
+const MAX_LEN = 42;
+
+function formatExpr(s) {
+  return s.replace(/\*/g, "×").replace(/\//g, "÷").replace(/-/g, "−");
+}
+
+function formatNumber(n) {
+  if (!isFinite(n)) return "Error";
+  if (Number.isInteger(n) && Math.abs(n) < 1e15) return String(n);
+  return String(parseFloat(n.toPrecision(12)));
+}
+
+function preview() {
+  if (!current || !/[\d)]$/.test(current)) return "";
+  try {
+    return "= " + formatNumber(evaluate(current));
+  } catch {
+    return "";
+  }
+}
+
+function updateDisplay() {
+  if (isError) {
+    expressionEl.textContent = "Ekspresi tidak valid";
+    resultEl.textContent = "Error";
+    resultEl.classList.add("error");
+    return;
+  }
+
+  resultEl.classList.remove("error");
+
+  if (justEvaluated) {
+    expressionEl.textContent = formatExpr(lastExpr) + " =";
+    resultEl.textContent = current;
+  } else {
+    expressionEl.textContent = preview();
+    resultEl.textContent = formatExpr(current) || "0";
+  }
+
+  resultEl.classList.toggle("small", resultEl.textContent.length > 12);
+}
+
+/* =====================================================
+   3. LOGIKA INPUT
+   ===================================================== */
+function clearAll() {
+  current = "";
+  lastExpr = "";
+  justEvaluated = false;
+  isError = false;
+  updateDisplay();
+}
+
+function del() {
+  if (isError) return clearAll();
+  if (justEvaluated) {
+    justEvaluated = false;
+    lastExpr = "";
+  }
+  current = current.slice(0, -1);
+  updateDisplay();
+}
+
+function appendValue(v) {
+  if (isError) { current = ""; isError = false; }
+
+  // Setelah "=" : digit mulai baru, operator melanjutkan hasil
+  if (justEvaluated) {
+    if (OPS.includes(v) || v === "%") {
+      lastExpr = "";
+    } else {
+      current = "";
+      lastExpr = "";
+    }
+    justEvaluated = false;
+  }
+
+  if (current.length >= MAX_LEN) return updateDisplay();
+
+  const last = current.slice(-1);
+
+  /* --- operator --- */
+  if (OPS.includes(v)) {
+    if (current === "") {
+      if (v === "-") current = "-";
+      return updateDisplay();
+    }
+    if (OPS.includes(last)) {
+      const allowMinus = (last === "*" || last === "/") && v === "-";
+      current = allowMinus ? current + v : current.slice(0, -1) + v;
+      return updateDisplay();
+    }
+    if (last === "(") {
+      if (v === "-") current += v;
+      return updateDisplay();
+    }
+    current += v;
+    return updateDisplay();
+  }
+
+  /* --- titik desimal --- */
+  if (v === ".") {
+    const seg = (current.match(/[\d.]*$/) || [""])[0];
+    if (seg.includes(".")) return updateDisplay();
+    current += seg === "" ? "0." : ".";
+    return updateDisplay();
+  }
+
+  /* --- persen --- */
+  if (v === "%") {
+    if (current === "" || OPS.includes(last) || last === "(") return updateDisplay();
+    current += "%";
+    return updateDisplay();
+  }
+
+  /* --- angka --- */
+  if (/^\d$/.test(v)) {
+    const seg = (current.match(/[\d.]*$/) || [""])[0];
+    if (seg === "0") current = current.slice(0, -1) + v;
+    else current += v;
+    return updateDisplay();
+  }
+}
+
+function toggleSign() {
+  if (isError) return clearAll();
+
+  if (justEvaluated) {
+    current = current.startsWith("-") ? current.slice(1) : "-" + current;
+    lastExpr = "";
+    updateDisplay();
+    return;
+  }
+
+  const m = current.match(/(\d*\.?\d+)$/);
+  if (!m) return updateDisplay();
+
+  const start = current.length - m[1].length;
+  const before = current[start - 1];
+
+  // sudah ada tanda minus sebelumnya → hapus
+  if (before === "-" && (start === 1 || /[+\-*/(]$/.test(current[start - 2]))) {
+    current = current.slice(0, start - 1) + current.slice(start);
+  } else {
+    current = current.slice(0, start) + "(-" + m[1] + ")";
+  }
+  updateDisplay();
+}
+
+function equals() {
+  if (isError) return clearAll();
+  if (current === "") return;
+
+  try {
+    const value = evaluate(current);
+    lastExpr = current;
+    current = formatNumber(value);
+    justEvaluated = true;
+    isError = false;
+  } catch {
+    isError = true;
+  }
+  updateDisplay();
+}
+
+/* =====================================================
+   4. ROUTER INPUT
+   ===================================================== */
+function input(v) {
+  switch (v) {
+    case "AC":  return clearAll();
+    case "DEL": return del();
+    case "=":   return equals();
+    case "+/-": return toggleSign();
+    default:    return appendValue(v);
+  }
+}
+
+/* =====================================================
+   5. EVENT: KLIK & KEYBOARD
+   ===================================================== */
+document.querySelectorAll(".keys button").forEach((btn) => {
+  btn.addEventListener("click", () => input(btn.dataset.value));
+});
+
+function flashKey(value) {
+  const btn = [...document.querySelectorAll(".keys button")]
+    .find((b) => b.dataset.value === value);
+  if (!btn) return;
+  btn.classList.add("pressed");
+  setTimeout(() => btn.classList.remove("pressed"), 110);
+}
+
+document.addEventListener("keydown", (e) => {
+  const k = e.key;
+  let mapped = null;
+
+  if (/^\d$/.test(k))                            mapped = k;
+  else if (k === "." || k === ",")               mapped = ".";
+  else if (k === "+" || k === "-" ||
+           k === "*" || k === "/")               mapped = k;
+  else if (k === "Enter" || k === "=") { e.preventDefault(); mapped = "="; }
+  else if (k === "Backspace")                    mapped = "DEL";
+  else if (k === "Escape" || k === "Delete")     mapped = "AC";
+  else if (k === "%")                            mapped = "%";
+
+  if (mapped !== null) {
+    input(mapped);
+    flashKey(mapped);
+  }
+});
+
+/* inisialisasi */
+updateDisplay();
+</script>
+</body>
+</html>
